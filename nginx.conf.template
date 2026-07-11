@@ -1,14 +1,55 @@
-worker_processes 1;
-events { worker_connections 1024; }
+worker_processes auto;
+events {
+    worker_connections 2048;
+    use epoll;
+    multi_accept on;
+}
 
 http {
+    # ==========================================
     # تنظیمات کلی برای بهبود عملکرد
+    # ==========================================
+    
+    # تنظیمات TCP برای سرعت بیشتر
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+    
+    # Keepalive برای اتصالات پایدار
+    keepalive_timeout 65;
+    keepalive_requests 1000;
+    
+    # تنظیمات بافرینگ
     client_max_body_size 100M;
+    client_body_buffer_size 128k;
+    client_header_buffer_size 1k;
+    large_client_header_buffers 4 8k;
+    output_buffers 32 32k;
+    
+    # Gzip - فشرده‌سازی
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_min_length 1000;
+    gzip_types text/plain text/css text/xml text/javascript application/json application/javascript application/xml+rss application/rss+xml;
+    
+    # Timeout ها
+    client_body_timeout 60;
+    client_header_timeout 60;
+    send_timeout 60;
     proxy_read_timeout 3600s;
     proxy_connect_timeout 75s;
+    proxy_send_timeout 3600s;
 
     server {
-        listen ${NGINX_PORT};
+        listen ${NGINX_PORT} reuseport;
+        server_name _;
+        
+        # هدرهای امنیتی
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-XSS-Protection "1; mode=block" always;
 
         # ==========================================
         # مسیر پنل مدیریت X-UI
@@ -23,9 +64,10 @@ http {
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
             
-            # افزایش timeout برای پنل
             proxy_read_timeout 300s;
             proxy_connect_timeout 75s;
+            proxy_send_timeout 300s;
+            proxy_buffering off;
         }
 
         # ==========================================
@@ -38,6 +80,14 @@ http {
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
+            
+            # کش برای ساب‌لینک
+            proxy_buffering on;
+            proxy_cache_valid 200 302 10m;
+            proxy_cache_valid 404 1m;
+            proxy_cache_key "$scheme$request_method$host$request_uri";
+            proxy_read_timeout 30s;
+            proxy_connect_timeout 10s;
         }
 
         # ==========================================
@@ -53,10 +103,11 @@ http {
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
             
-            # زمان‌های طولانی برای WebSocket (مهم!)
             proxy_read_timeout 3600s;
             proxy_send_timeout 3600s;
             proxy_connect_timeout 75s;
+            proxy_buffering off;
+            proxy_cache off;
         }
     }
 }

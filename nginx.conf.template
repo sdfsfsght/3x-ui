@@ -2,10 +2,17 @@ worker_processes 1;
 events { worker_connections 1024; }
 
 http {
+    # تنظیمات کلی برای بهبود عملکرد
+    client_max_body_size 100M;
+    proxy_read_timeout 3600s;
+    proxy_connect_timeout 75s;
+
     server {
         listen ${NGINX_PORT};
 
-        # مسیر پنل وب (فوروارد به پورت داخلی 2053 که x-ui روش گوش می‌ده)
+        # ==========================================
+        # مسیر پنل مدیریت X-UI
+        # ==========================================
         location /managepanel/ {
             proxy_pass http://127.0.0.1:2053/managepanel/;
             proxy_http_version 1.1;
@@ -15,9 +22,15 @@ http {
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
+            
+            # افزایش timeout برای پنل
+            proxy_read_timeout 300s;
+            proxy_connect_timeout 75s;
         }
 
-        # مسیر Subscription (ساب لینک) - فوروارد به پورت داخلی 2096
+        # ==========================================
+        # مسیر Subscription (ساب‌لینک)
+        # ==========================================
         location /sub/ {
             proxy_pass http://127.0.0.1:2096/sub/;
             proxy_http_version 1.1;
@@ -27,7 +40,9 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
-        # هر مسیر دیگه (اینباند VLESS/WebSocket) به پورت داخلی 8080
+        # ==========================================
+        # مسیر اصلی (VLESS+WebSocket) - پورت ۸۰۸۰
+        # ==========================================
         location / {
             proxy_pass http://127.0.0.1:8080;
             proxy_http_version 1.1;
@@ -37,6 +52,11 @@ http {
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
+            
+            # زمان‌های طولانی برای WebSocket (مهم!)
+            proxy_read_timeout 3600s;
+            proxy_send_timeout 3600s;
+            proxy_connect_timeout 75s;
         }
     }
 }

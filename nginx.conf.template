@@ -2,10 +2,33 @@ worker_processes 1;
 events { worker_connections 1024; }
 
 http {
-    server {
-        listen ${NGINX_PORT};
+    # تنظیمات SSL
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+    
+    # تنظیمات کلی
+    client_max_body_size 100M;
+    proxy_read_timeout 3600s;
+    proxy_connect_timeout 75s;
 
-        # مسیر پنل وب (فوروارد به پورت داخلی 2053 که x-ui روش گوش می‌ده)
+    # ============================================
+    # سرور اصلی با HTTPS
+    # ============================================
+    server {
+        # گوش‌دهی روی پورتی که Railway داده
+        listen ${NGINX_PORT} ssl http2;
+        server_name ${DOMAIN};
+
+        # مسیر سرتیفیکیت‌ها
+        ssl_certificate /etc/nginx/ssl/fullchain.pem;
+        ssl_certificate_key /etc/nginx/ssl/privkey.pem;
+
+        # ==========================================
+        # مسیر پنل مدیریت X-UI
+        # ==========================================
         location /managepanel/ {
             proxy_pass http://127.0.0.1:2053/managepanel/;
             proxy_http_version 1.1;
@@ -15,9 +38,14 @@ http {
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
+            
+            proxy_read_timeout 300s;
+            proxy_connect_timeout 75s;
         }
 
-        # مسیر Subscription (ساب لینک) - فوروارد به پورت داخلی 2096
+        # ==========================================
+        # مسیر ساب‌اسکریپشن (Subscription)
+        # ==========================================
         location /sub/ {
             proxy_pass http://127.0.0.1:2096/sub/;
             proxy_http_version 1.1;
@@ -27,7 +55,9 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
-        # هر مسیر دیگه (اینباند VLESS/WebSocket) به پورت داخلی 8080
+        # ==========================================
+        # مسیر اصلی (VLESS+WebSocket) - پورت ۸۰۸۰
+        # ==========================================
         location / {
             proxy_pass http://127.0.0.1:8080;
             proxy_http_version 1.1;
@@ -37,6 +67,22 @@ http {
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
+            
+            # زمان‌های طولانی برای WebSocket
+            proxy_read_timeout 3600s;
+            proxy_send_timeout 3600s;
+            proxy_connect_timeout 75s;
         }
+    }
+
+    # ============================================
+    # ریدایرکت HTTP به HTTPS (برای Railway)
+    # ============================================
+    server {
+        listen 80;
+        server_name ${DOMAIN};
+        
+        # ریدایرکت به HTTPS با پورت داینامیک
+        return 301 https://$server_name:${NGINX_PORT}$request_uri;
     }
 }

@@ -1,15 +1,62 @@
-worker_processes 1;
-events { worker_connections 1024; }
+worker_processes auto;
+events {
+    worker_connections 4096;
+    use epoll;
+    multi_accept on;
+}
 
 http {
-    # تنظیمات کلی برای بهبود عملکرد
+    # ==========================================
+    # تنظیمات پیشرفته برای سرعت بالا
+    # ==========================================
+    
+    # کش کردن اطلاعات DNS
+    resolver 8.8.8.8 1.1.1.1 valid=300s;
+    resolver_timeout 5s;
+    
+    # تنظیمات TCP برای سرعت بیشتر
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+    
+    # کاهش مصرف حافظه و افزایش سرعت
+    keepalive_timeout 65;
+    keepalive_requests 1000;
+    
+    # تنظیمات بافرینگ
+    client_body_buffer_size 128k;
     client_max_body_size 100M;
-    proxy_read_timeout 3600s;
-    proxy_connect_timeout 75s;
-
+    client_header_buffer_size 1k;
+    large_client_header_buffers 4 8k;
+    output_buffers 32 32k;
+    postpone_output 1460;
+    
+    # تنظیمات Gzip برای فشرده‌سازی (سرعت بیشتر در انتقال)
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_min_length 1000;
+    gzip_types text/plain text/css text/xml text/javascript application/json application/javascript application/xml+rss application/rss+xml;
+    
+    # کش کردن اطلاعات باز شده
+    open_file_cache max=1000 inactive=20s;
+    open_file_cache_valid 30s;
+    open_file_cache_min_uses 2;
+    open_file_cache_errors on;
+    
+    # ==========================================
+    # سرور اصلی
+    # ==========================================
     server {
-        listen ${NGINX_PORT};
-
+        listen ${NGINX_PORT} reuseport;
+        server_name _;
+        
+        # هدرهای امنیتی و بهینه
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-XSS-Protection "1; mode=block" always;
+        
         # ==========================================
         # مسیر پنل مدیریت X-UI
         # ==========================================
@@ -23,9 +70,17 @@ http {
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
             
-            # افزایش timeout برای پنل
+            # تنظیمات سرعت برای پنل
             proxy_read_timeout 300s;
             proxy_connect_timeout 75s;
+            proxy_send_timeout 300s;
+            proxy_buffering off;
+            proxy_cache off;
+            
+            # بافرینگ برای سرعت بیشتر
+            proxy_buffer_size 128k;
+            proxy_buffers 4 256k;
+            proxy_busy_buffers_size 256k;
         }
 
         # ==========================================
@@ -38,6 +93,17 @@ http {
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
+            
+            # تنظیمات کش برای ساب‌لینک
+            proxy_buffering on;
+            proxy_cache_valid 200 302 60m;
+            proxy_cache_valid 404 1m;
+            proxy_cache_key "$scheme$request_method$host$request_uri";
+            
+            # افزایش سرعت
+            proxy_read_timeout 30s;
+            proxy_connect_timeout 10s;
+            proxy_send_timeout 30s;
         }
 
         # ==========================================
@@ -53,10 +119,26 @@ http {
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
             
-            # زمان‌های طولانی برای WebSocket (مهم!)
+            # تنظیمات فوق‌العاده برای WebSocket
             proxy_read_timeout 3600s;
             proxy_send_timeout 3600s;
             proxy_connect_timeout 75s;
+            proxy_buffering off;
+            proxy_cache off;
+            proxy_redirect off;
+            
+            # تنظیمات بافرینگ برای سرعت بالا
+            proxy_buffer_size 128k;
+            proxy_buffers 4 256k;
+            proxy_busy_buffers_size 256k;
+            
+            # تنظیمات TCP برای WebSocket
+            proxy_set_header X-Forwarded-Host $host;
+            proxy_set_header X-Forwarded-Server $host;
+            
+            # افزایش محدودیت‌ها
+            proxy_http_version 1.1;
+            proxy_request_buffering off;
         }
     }
 }

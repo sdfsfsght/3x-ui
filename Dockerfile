@@ -9,6 +9,8 @@ RUN apk add --no-cache \
     sqlite \
     nginx \
     gettext \
+    openssl \
+    netcat-openbsd \
     && ln -sf /usr/share/zoneinfo/Asia/Tehran /etc/localtime
 
 # دانلود و نصب 3x-ui
@@ -17,7 +19,7 @@ RUN curl -L https://github.com/mhsanaei/3x-ui/releases/download/v3.4.2/x-ui-linu
     && rm /tmp/x-ui.tar.gz \
     && chmod +x /usr/local/x-ui/x-ui
 
-RUN mkdir -p /etc/x-ui /var/log/x-ui
+RUN mkdir -p /etc/x-ui /var/log/x-ui /etc/nginx/ssl
 
 COPY nginx.conf.template /etc/nginx/nginx.conf.template
 COPY start.sh /start.sh
